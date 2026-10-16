@@ -1,0 +1,236 @@
+openapi: 3.1.0
+info:
+  title: rust-template
+  description: 'Rust microservice template: single service app (axum + tokio) skeleton'
+  license:
+    name: MIT
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      tags:
+      - health
+      summary: 'Liveness: the process is up. Always 204.'
+      operationId: healthz
+      responses:
+        '204':
+          description: The process is up
+  /readyz:
+    get:
+      tags:
+      - health
+      summary: |-
+        Readiness: 204 when every registered check passes, problem+json 503
+        otherwise. Failure messages are logged, not exposed.
+      operationId: readyz
+      responses:
+        '204':
+          description: Every registered check passes
+        '503':
+          description: A dependency is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/notes:
+    get:
+      tags:
+      - notes
+      summary: '`GET /v1/notes`: one page of notes.'
+      operationId: get_notes
+      parameters:
+      - name: page
+        in: query
+        description: Page number, starting at 1.
+        required: true
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+      - name: perPage
+        in: query
+        description: Notes per page, at most 100 (0 returns an empty page, like Fastify).
+        required: true
+        schema:
+          type: integer
+          format: int32
+          maximum: 100
+          minimum: 0
+      responses:
+        '200':
+          description: A page of notes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotesResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags:
+      - notes
+      summary: '`POST /v1/notes`: create a note.'
+      operationId: create_note
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNoteBody'
+        required: true
+      responses:
+        '201':
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateNoteResponse'
+        '400':
+          description: Invalid note
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    CreateNoteBody:
+      type: object
+      description: '`POST /v1/notes` request body.'
+      required:
+      - note
+      - owner
+      properties:
+        note:
+          type: string
+          description: |-
+            Note text; JSON Schema `maxLength` counts code points (AJV parity), so
+            the rule uses garde's `chars` mode — `simple` would count bytes.
+          maxLength: 300
+        owner:
+          type: string
+          description: Owner of the note.
+          maxLength: 100
+      additionalProperties: false
+    CreateNoteResponse:
+      type: object
+      description: '`POST /v1/notes` response body.'
+      required:
+      - message
+      - note
+      properties:
+        message:
+          type: string
+          description: Human-readable creation message (Fastify parity).
+        note:
+          $ref: '#/components/schemas/Note'
+          description: The stored note.
+    Note:
+      type: object
+      description: |-
+        A note (the `note` table row; Fastify's `note` Prisma model).
+
+        Field names are snake_case (the query macros map columns to fields by
+        name); the SQL aliases the camelCase columns (`"createdAt" AS created_at`).
+      required:
+      - id
+      - owner
+      - note
+      - createdAt
+      - updatedAt
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp.
+        id:
+          type: integer
+          format: int32
+          description: Autoincrement id.
+        note:
+          type: string
+          description: Note text.
+        owner:
+          type: string
+          description: Owner of the note.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last-update timestamp.
+    NotesResponse:
+      type: object
+      description: '`GET /v1/notes` response body.'
+      required:
+      - notes
+      properties:
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
+          description: The requested page of notes.
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required:
+      - type
+      - title
+      - status
+      properties:
+        detail:
+          type:
+          - string
+          - 'null'
+          description: Human-readable explanation for this occurrence.
+        errors:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/ProblemError'
+          description: Validation details (extension member, ADR-0005).
+        instance:
+          type:
+          - string
+          - 'null'
+          description: URI of the specific occurrence.
+        status:
+          type: integer
+          format: int32
+          description: HTTP status code.
+          minimum: 0
+        title:
+          type: string
+          description: Short human-readable summary of the problem type.
+        type:
+          type: string
+          description: URI identifying the problem type.
+    ProblemError:
+      type: object
+      description: One entry in the `errors` validation extension member.
+      required:
+      - detail
+      properties:
+        detail:
+          type: string
+          description: What is wrong with the value.
+        pointer:
+          type:
+          - string
+          - 'null'
+          description: JSON Pointer of the offending field.
+tags:
+- name: health
+- name: notes

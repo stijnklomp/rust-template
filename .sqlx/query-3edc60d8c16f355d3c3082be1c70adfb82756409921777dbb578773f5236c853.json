@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO note (owner, note, \"createdAt\", \"updatedAt\")\n               VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3edc60d8c16f355d3c3082be1c70adfb82756409921777dbb578773f5236c853"
+}

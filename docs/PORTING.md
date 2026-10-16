@@ -21,7 +21,7 @@ Ground rules:
 | Fastify (TS) | Rust |
 | --- | --- |
 | Fastify 5 route objects | axum 0.8 routers, `{param}` path syntax |
-| `@fastify/helmet` security headers | response-header layer equivalent |
+| `@fastify/helmet` security headers | **security-headers layer**, every response: `x-content-type-options: nosniff`, `x-frame-options: SAMEORIGIN`, `referrer-policy: no-referrer`, `x-dns-prefetch-control: off`, `x-download-options: noopen`, `x-permitted-cross-domain-policies: none`; CSP and HSTS deliberately omitted (app-specific / needs TLS) |
 | CORS file (fully commented out) | `CorsLayer` present, off by default |
 | `@fastify/sensible` | problem+json error layer (ADR-0005) |
 | `hyperid` request IDs | request-id layer (uuid) |
@@ -37,7 +37,7 @@ Ground rules:
   - **Kept**: `API_PORT`, `DATABASE_*`, `CACHE_*`, `RABBIT_*`, `WORKER_QUEUE`, `WORKER_EXCHANGE`, `WORKER_BINDING_KEY`, `REQUEST_LOG_LEVEL`.
   - **Renamed**: `CUSTOM_LOG_LEVEL` → `APP_LOG_LEVEL`; `NODE_ENV` → `APP_ENV`.
   - **Dropped**: `DEPLOYMENT_MODE`, `SHOW_LOGS`, `ENV`, `HOST_UID`/`HOST_GID` (compose specifics kept as-is where useful).
-  - **New**: `WORKER_PREFETCH` (default 1), `OTEL_EXPORTER_OTLP_ENDPOINT` (optional), `IMAGE` (compose `publish` profile).
+  - **New**: `WORKER_PREFETCH` (default 1), `OTEL_EXPORTER_OTLP_ENDPOINT` (reserved hook — the exporter is deliberately deferred until OTel Rust stabilizes; see the map's Fog and ADR-0007), `IMAGE` (compose `publish` profile).
   - **Fix**: `RABBIT_PORT` default corrected to 5672 (the TS code defaulted to 5671 while every env file used 5672).
 
 ### Logging
@@ -78,7 +78,7 @@ Ground rules:
 
 - Unit tests: module mocking + `bun-mock-prisma` → in-crate tests with hand-written fakes behind traits (no module mocking in Rust).
 - Feature tests: `app.inject` → axum-test, in-process.
-- Acceptance tests: empty scaffolding in TS → real full-stack tests run through Docker Compose profiles (`test` = once and exit; `acceptance` = idle stack for manual runs/debugging).
+- Acceptance tests: empty scaffolding in TS → real full-stack tests in `tests/acceptance/` (feature-gated), run through Docker Compose profiles (`test` = once and exit; `acceptance` = idle stack for manual runs/debugging); the real-broker integration tests (`tests/amqp.rs`, `tests/consumer.rs`) run in the same `acceptance` nextest profile, so the default profile (`just test` = `cargo nextest run` + `cargo test --doc`) needs no infrastructure.
 - Coverage: bun threshold config → `just coverage` via cargo-llvm-cov (no threshold gate shipped — no CI yet).
 - Test fixtures and helpers: ported where useful.
 
@@ -90,6 +90,7 @@ Ground rules:
 
 - Bun multi-stage Dockerfile → cargo-chef + BuildKit cache → distroless `cc-debian13:nonroot`; one image for the service app; multi-arch (amd64 + arm64) manifest via `just docker-publish` (ADR-0009).
 - Compose profiles: `infra` (Postgres/Valkey/RabbitMQ only), `dev` (source-mounted hot reload), `local` (build from Dockerfile), `publish` (run a **published** image from the registry — no build), `test` (stack + acceptance once, exit), `acceptance` (stack idle; exec in to run all/one test or debug).
+- Service keys are `db` / `cache` / `rabbitmq` — a divergence from ticket #4's `postgres` / `valkey` / `rabbitmq` letter, chosen to mirror the Fastify template so the committed `.env.development` values (`CACHE_HOST=cache`, `RABBIT_HOST=rabbitmq`) and the `dev` service's in-network `DATABASE_URL` (`db`) stay coherent.
 - `scripts/` (integrity, migrate, check-licenses, sbom) → all become `just` recipes.
 
 ### Kubernetes

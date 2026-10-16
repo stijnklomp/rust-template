@@ -1,0 +1,15 @@
+# ClusterIP in front of the app pods. The probes talk to the pod directly;
+# this Service is what in-cluster clients call.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-template
+  labels:
+    app.kubernetes.io/name: rust-template
+spec:
+  selector:
+    app.kubernetes.io/name: rust-template
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

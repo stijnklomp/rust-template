@@ -1,0 +1,195 @@
+{
+  "consumer": {
+    "name": "notes-client"
+  },
+  "interactions": [
+    {
+      "description": "a request for a page of notes",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a note exists",
+          "params": {
+            "note": "written by the pact provider state",
+            "owner": "pact-notes-client"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/v1/notes",
+        "query": {
+          "page": [
+            "1"
+          ],
+          "perPage": [
+            "10"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "notes": [
+              {
+                "createdAt": "2026-10-16T12:00:00.123456",
+                "id": 0,
+                "note": "written by the pact provider state",
+                "owner": "pact-notes-client",
+                "updatedAt": "2026-10-16T12:00:00.123456"
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "matchingRules": {
+          "body": {
+            "$.notes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.notes[*].*": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.notes[*].createdAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.notes[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.notes[*].note": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.notes[*].owner": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.notes[*].updatedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "transport": "http",
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "a request to create a note",
+      "pending": false,
+      "request": {
+        "body": {
+          "content": {
+            "note": "created by the notes-client example",
+            "owner": "pact-notes-client"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "content-type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/v1/notes"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "message": "Note Created",
+            "note": {
+              "createdAt": "2026-10-16T12:00:00.123456",
+              "id": 0,
+              "note": "created by the notes-client example",
+              "owner": "pact-notes-client",
+              "updatedAt": "2026-10-16T12:00:00.123456"
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "matchingRules": {
+          "body": {
+            "$.note.createdAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.note.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.note.updatedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      },
+      "transport": "http",
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "consumer": "1.4.10",
+      "mockserver": "2.2.5",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "removeWhen": "example — remove when building your service"
+  },
+  "provider": {
+    "name": "rust-template"
+  }
+}

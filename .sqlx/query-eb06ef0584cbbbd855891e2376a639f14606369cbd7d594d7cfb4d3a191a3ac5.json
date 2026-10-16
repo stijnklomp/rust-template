@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "TRUNCATE TABLE note RESTART IDENTITY",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "eb06ef0584cbbbd855891e2376a639f14606369cbd7d594d7cfb4d3a191a3ac5"
+}

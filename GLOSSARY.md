@@ -17,7 +17,7 @@ The library module that declares queues and runs the consume loop (always-ack, D
 _Avoid_: listener, subscriber
 
 **Demo slice**:
-The marked example code (notes routes, seed tooling) whose only purpose is to materialize the template's patterns; removed when building a real service.
+The marked example code (notes routes, their tests, seed tooling) whose only purpose is to materialize the template's patterns; removed when building a real service.
 _Avoid_: sample, boilerplate, scaffold
 
 ## Logging
@@ -28,6 +28,16 @@ Per-request HTTP log line; verbosity controlled by `REQUEST_LOG_LEVEL`.
 **App log**:
 All non-request logs — business logic, lifecycle, infrastructure; verbosity controlled by `APP_LOG_LEVEL`. (Replaces the Fastify template's `CUSTOM_LOG_LEVEL`.)
 _Avoid_: custom log, business log
+
+## Testing
+
+**Fast suite**:
+The default nextest run — unit and feature tests, no infrastructure — plus doctests (`just test`). The acceptance suite and the real-broker integration tests are deliberately not in it.
+_Avoid_: unit tests, default tests
+
+**Acceptance suite**:
+The feature-gated tests in `tests/acceptance/` that drive the real app against real Postgres, Valkey and RabbitMQ, through the compose `test`/`acceptance` profiles.
+_Avoid_: integration tests
 
 ## Compose profiles
 
