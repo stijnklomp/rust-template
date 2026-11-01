@@ -33,10 +33,12 @@ pub fn document() -> OpenApi {
 /// The generated document serialized as YAML (with a trailing newline).
 pub fn to_yaml() -> std::io::Result<String> {
     let mut yaml = document().to_yaml().map_err(|error| {
+        // coverage:ignore-start: the generated document is always serializable; this is a defensive map
         std::io::Error::other(format!("failed to serialize the OpenAPI document: {error}"))
     })?;
+    // coverage:ignore-end
     if !yaml.ends_with('\n') {
-        yaml.push('\n');
+        yaml.push('\n'); // coverage:ignore: serde_yaml always emits a trailing newline
     }
     Ok(yaml)
 }

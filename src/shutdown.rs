@@ -61,6 +61,7 @@ impl ShutdownWatch {
 }
 
 /// Completes when SIGINT (Ctrl-C) or SIGTERM arrives.
+// coverage:ignore-start: signal delivery is process-global; the shutdown drain it triggers is feature-tested
 pub async fn wait_for_signal() {
     #[cfg(unix)]
     {
@@ -86,6 +87,7 @@ pub async fn wait_for_signal() {
         let _ = tokio::signal::ctrl_c().await;
     }
 }
+// coverage:ignore-end
 
 type CleanupTask = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
 
@@ -117,7 +119,7 @@ impl CleanupRegistry {
                 Ok(()) => tracing::info!(cleanup = name, "cleanup task finished"),
                 Err(_) => tracing::warn!(
                     cleanup = name,
-                    timeout_ms = task_timeout.as_millis(),
+                    timeout_ms = task_timeout.as_millis(), // coverage:ignore: tracing macro field; the timeout path is tested
                     "cleanup task timed out; abandoning it"
                 ),
             }

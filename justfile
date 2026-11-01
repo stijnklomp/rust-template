@@ -4,6 +4,13 @@
 # environment still wins.
 set dotenv-load
 
+# Files whose tests live in the component/acceptance suites, or that are
+# entrypoints rather than fast-suite code. They are outside the unit + feature
+# coverage report (ADR-0013); keep them exercised by their own gates. Do not
+# add business modules here: use a `coverage:ignore` marker for a genuinely
+# untestable line instead.
+coverage_ignore := '(^|/)src/(main\.rs|app\.rs|bin/|repositories/|database\.rs|amqp\.rs|consumer\.rs|infrastructure/)'
+
 # List the available recipes.
 default:
     @just --list
@@ -124,9 +131,19 @@ acceptance:
     HOST_UID=`id -u` HOST_GID=`id -g` docker compose --profile acceptance up -d --wait
     @echo "acceptance stack is up — exec in with: docker compose --profile acceptance exec acceptance <command>"
 
-# Coverage report for the fast suite (LCOV → lcov.info, gitignored).
+# Fast-suite line coverage (unit + feature, no infrastructure) → lcov.info,
+# gitignored. App composition, repositories and entrypoints are excluded above;
+# their coverage comes from the component/acceptance suites.
+# Generate the fast-suite LCOV report.
 coverage:
-    cargo llvm-cov nextest --lcov --output-path lcov.info
+    cargo llvm-cov nextest --lcov --output-path lcov.info --ignore-filename-regex '{{coverage_ignore}}'
+    ./scripts/coverage-check.sh --report lcov.info
+
+# Fail when any measured fast-suite line is uncovered (100% gate, ADR-0013).
+# `coverage` already ran the tests and filtered the report.
+# Fail on any uncovered fast-suite line.
+coverage-check: coverage
+    ./scripts/coverage-check.sh --check lcov.info
 
 # --- Supply chain (ADR-0010) -------------------------------------------------
 
@@ -218,9 +235,9 @@ sqlx-check:
 
 # Run every gate end-to-end, aborting at the first failure: formatting, lint,
 # the `.sqlx` offline-cache check, the spec-approval lock, the fast suite, the
-# component suite, the in-process spec suite, the compose black-box suite,
-# cargo-deny, the SBOM + auditable release build, pact verification,
-# acceptance. `sqlx-check`, `test-pact`, `test-component` and `test-spec` need
+# fast-suite coverage gate, the component suite, the in-process spec suite, the
+# compose black-box suite, cargo-deny, the SBOM + auditable release build, pact
+# verification, acceptance. `sqlx-check`, `test-pact`, `test-component` and `test-spec` need
 # the infra stack on localhost:5432/6379/5672 (`docker compose --profile infra
 # up -d`); `licenses` needs network access for the RustSec advisory database
 # (cached after the first fetch); `test-blackbox-compose` and
@@ -228,4 +245,4 @@ sqlx-check:
 # `DATABASE_PORT=15432 CACHE_PORT=16379 RABBIT_PORT=15673 RABBIT_MGMT_PORT=15674
 # just integrity`, when another stack is already using the defaults.
 # `test-blackbox <url>` is deliberately not here: it needs a deployed service.
-integrity: fmt-check lint sqlx-check spec-check test licenses sbom test-pact test-component test-spec test-blackbox-compose test-acceptance
+integrity: fmt-check lint sqlx-check spec-check test coverage-check licenses sbom test-pact test-component test-spec test-blackbox-compose test-acceptance

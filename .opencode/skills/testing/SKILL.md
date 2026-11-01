@@ -12,6 +12,6 @@ description: Use when writing or running tests, or when deciding whether a test 
 - `just test-blackbox-compose` — the same spec against the compose-hosted app (built from source), serial.
 - `just test-pact` — contract tests, both sides. Needs Postgres.
 - `just test-acceptance` — component + in-process spec through the compose `test` profile, once. `just acceptance` leaves that stack idle for focused exec runs.
-- `just check` is the pre-finish gate; `just coverage` writes LCOV.
+- `just check` is the pre-finish gate; `just coverage` writes LCOV for the fast suite, and `just coverage-check` enforces 100% of the measured lines with `coverage:ignore` markers for genuinely untestable lines. Both are documented in `tests/AGENTS.md`.
 
 Specs are human-owned: never edit `tests/acceptance/specs/*.feature` without approval; `just spec-approve` refreshes the lock after review, and `just spec-check` fails the gate otherwise. Unit tests stay inline in `src/` (ADR-0012); step definitions live in `tests/acceptance/steps/` and must not import `rust_template::` (ADR-0011).

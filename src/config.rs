@@ -284,9 +284,11 @@ const RABBIT_TRANSPORT_VALUES: &str = "amqp or amqps";
 
 impl AppConfig {
     /// Loads configuration from the working directory and process environment.
+    // coverage:ignore-start: process-level startup wrapper; load_from is unit-tested and main is acceptance-tested
     pub fn load() -> Result<Self, ConfigError> {
         Self::load_from(Path::new("."), |key| std::env::var(key).ok())
     }
+    // coverage:ignore-end
 
     /// Loads configuration from `dir` (`.env` and `.env.{APP_ENV}`) overlaid by
     /// `process_env`. Exposed for tests and for services with custom layouts.
@@ -637,6 +639,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.app_env, AppEnv::Production);
+        assert_eq!(config.app_env.as_str(), "production");
         assert!(config.app_env.is_production());
         assert_eq!(config.api_port, 8080);
         assert_eq!(config.request_log_level, LevelFilter::DEBUG);
@@ -734,6 +737,29 @@ mod tests {
         let config = AppConfig::load_from(&dir.path, env_from(&[])).unwrap();
         assert_eq!(config.app_env, AppEnv::Tests);
         assert_eq!(config.api_port, 4400);
+    }
+
+    #[test]
+    fn env_file_read_errors_name_the_file() {
+        let dir = TempDir::new("read-errors");
+
+        // A directory is not a readable dotenv file.
+        let error = read_env_file(&dir.path).unwrap_err();
+        assert!(matches!(error, ConfigError::EnvFile { .. }));
+
+        // An unterminated quote is a dotenv parse error.
+        dir.write(".env", "BROKEN='unterminated\n");
+        let error = read_env_file(&dir.path.join(".env")).unwrap_err();
+        assert!(matches!(error, ConfigError::EnvFile { .. }));
+
+        // A symlink loop fails to open without relying on file permissions.
+        #[cfg(unix)]
+        {
+            let link = dir.path.join("loop.env");
+            std::os::unix::fs::symlink("loop.env", &link).unwrap();
+            let error = read_env_file(&link).unwrap_err();
+            assert!(matches!(error, ConfigError::EnvFile { .. }));
+        }
     }
 
     #[test]

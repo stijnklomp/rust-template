@@ -35,7 +35,7 @@ Everything runs through `just` (ADR-0010: the recipes are the gates; there are n
 | `just integrity` | Every gate end-to-end, aborting at the first failure. Heavy; needs infrastructure. |
 | `just docker-build` / `just docker-publish` | Local image / multi-arch manifest build-and-push. |
 
-Test recipes (`test-component`, `test-spec`, `test-blackbox`, `test-blackbox-compose`, `test-pact`, `test-acceptance`, `acceptance`, `coverage`) and their prerequisites are in [`tests/AGENTS.md`](tests/AGENTS.md).
+Test recipes (`test-component`, `test-spec`, `test-blackbox`, `test-blackbox-compose`, `test-pact`, `test-acceptance`, `acceptance`, `coverage`, `coverage-check`) and their prerequisites are in [`tests/AGENTS.md`](tests/AGENTS.md).
 
 ## Rules
 
@@ -54,7 +54,7 @@ Test recipes (`test-component`, `test-spec`, `test-blackbox`, `test-blackbox-com
 - `src/lib.rs` — `routes` → `controllers` → `services` → `repositories` (+ `models` DTOs), `infrastructure/` (cache), `amqp.rs` + `consumer.rs`, `config.rs`, `logging.rs`, `problem.rs` (RFC 9457), `health.rs`, `server.rs`, `shutdown.rs`, `openapi.rs`.
 - `src/bin/` — `openapi` (writes `openapi.yaml`), `migrate` (applies embedded migrations, no sqlx CLI), `db_seed` (demo tooling).
 - `tests/` — see [`tests/AGENTS.md`](tests/AGENTS.md): `feature/`, `component/`, `acceptance/`, `integration/`, `pact/`.
-- `migrations/`, `docker-compose.yml` (profiles: infra/dev/local/publish/test/acceptance/blackbox), `k8s/` (plain manifests), `pacts/` (checked-in contracts), `examples/`.
+- `migrations/`, `docker-compose.yml` (profiles: infra/dev/local/publish/test/acceptance/blackbox), `k8s/` (plain manifests), `pacts/` (checked-in contracts), `examples/`, `scripts/` (coverage marker filter).
 
 ## Pitfalls
 

@@ -183,7 +183,7 @@ pub async fn serve(
         result = &mut server => result?,
         () = &mut drain_deadline => {
             tracing::warn!(
-                drain_timeout_ms = drain_timeout.as_millis(),
+                drain_timeout_ms = drain_timeout.as_millis(), // coverage:ignore: tracing macro field; the timeout path is tested
                 "in-flight requests did not finish before the drain timeout; aborting"
             );
         }
@@ -200,7 +200,16 @@ async fn rewrite_pipeline_rejections(request: Request, next: Next) -> Response {
         return response;
     }
 
-    let rejection = match response.status() {
+    match pipeline_problem(response.status()) {
+        Some(problem) => problem.into_response(),
+        None => response,
+    }
+}
+
+/// Problem for the pipeline's own rejection statuses; `None` leaves every
+/// handler-produced response untouched.
+fn pipeline_problem(status: StatusCode) -> Option<Problem> {
+    match status {
         StatusCode::PAYLOAD_TOO_LARGE => Some(
             Problem::new(StatusCode::PAYLOAD_TOO_LARGE).with_detail(format!(
                 "request body exceeds the {REQUEST_BODY_LIMIT} byte limit"
@@ -210,11 +219,6 @@ async fn rewrite_pipeline_rejections(request: Request, next: Next) -> Response {
             Some(Problem::new(StatusCode::REQUEST_TIMEOUT).with_detail("request timed out"))
         }
         _ => None,
-    };
-
-    match rejection {
-        Some(problem) => problem.into_response(),
-        None => response,
     }
 }
 
@@ -262,8 +266,8 @@ impl<B> OnResponse<B> for RequestFinished {
         tracing::info!(
             target: REQUEST_LOG_TARGET,
             parent: span,
-            status = response.status().as_u16(),
-            latency_ms = latency.as_secs_f64() * 1000.0,
+            status = response.status().as_u16(), // coverage:ignore: tracing macro field; request logging is feature-tested
+            latency_ms = latency.as_secs_f64() * 1000.0, // coverage:ignore: tracing macro field; request logging is feature-tested
             "finished processing request"
         );
     }
@@ -391,6 +395,19 @@ mod tests {
         let body = response_json(response).await;
         assert_eq!(body["status"], 413);
         assert_eq!(body["title"], "Payload Too Large");
+    }
+
+    #[test]
+    fn pipeline_rejections_become_problem_json() {
+        let timeout = pipeline_problem(StatusCode::REQUEST_TIMEOUT).unwrap();
+        assert_eq!(timeout.status, 408);
+        assert_eq!(timeout.detail.as_deref(), Some("request timed out"));
+
+        let too_large = pipeline_problem(StatusCode::PAYLOAD_TOO_LARGE).unwrap();
+        assert_eq!(too_large.status, 413);
+        assert!(too_large.detail.unwrap().contains("byte limit"));
+
+        assert!(pipeline_problem(StatusCode::BAD_REQUEST).is_none());
     }
 
     #[tokio::test]

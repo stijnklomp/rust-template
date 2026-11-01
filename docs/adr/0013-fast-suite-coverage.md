@@ -1,0 +1,9 @@
+# Fast-suite coverage: 100%, with explicit exclusions
+
+The unit + feature suite is the fast coverage surface: `just coverage` runs the default nextest profile through cargo-llvm-cov and writes `lcov.info`; `just coverage-check` fails when any measured line has a zero execution count. There is no percentage threshold: 100% is the only number the gate accepts, so adding covered code cannot dilute a ratio and an uncovered line cannot hide behind a large denominator.
+
+Not every file belongs to this surface. `src/main.rs`, `src/bin/`, `src/app.rs`, `src/repositories/`, `src/database.rs`, `src/amqp.rs`, `src/consumer.rs` and `src/infrastructure/` are entrypoints or are exercised against real Postgres, Valkey or RabbitMQ by the component/acceptance suites; they are excluded in `justfile` rather than littered with markers. The gate therefore means "100% of fast-suite-owned code", not "100% of the service"; the component/acceptance suites remain the evidence for the excluded modules.
+
+Stable Rust 1.99 has no stable line-level coverage exclusion (`#[coverage(off)]` is experimental and item-level), so `scripts/coverage-check.sh` applies the repository's own markers to the LCOV report: `// coverage:ignore: reason` for a line and `// coverage:ignore-start: reason` / `// coverage:ignore-end` for a block. Markers are only for lines the fast suite genuinely cannot exercise; a line that can be tested gets a test, and a business module does not get added to the filename exclusion list. The script recalculates `LF`/`LH` after filtering and exits non-zero with `file:line` for every remaining uncovered line.
+
+The gate runs in `just integrity`, not `just check`: it needs cargo-llvm-cov and instrumentation, and it deliberately re-runs the fast suite. Pact contract coverage is not part of this metric; contracts are verified by `just test-pact` on their own axis.

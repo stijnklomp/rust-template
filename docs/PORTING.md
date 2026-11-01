@@ -80,7 +80,7 @@ Ground rules:
 - Feature tests: `app.inject` → axum-test, in-process, in `tests/feature/` (ADR-0012).
 - Acceptance tests: empty scaffolding in TS → a Gherkin executable spec in `tests/acceptance/` run by Cucumber (ADR-0011), in-process and concurrent by default, and black-box/serial against a deployed service or the compose-hosted app via `SPEC_TARGET` (`just test-blackbox`, `just test-blackbox-compose`). Component tests (`tests/component/`) cover this service against its real Postgres/Valkey/RabbitMQ; the default profile (`just test` = `cargo nextest run` + `cargo test --doc`) needs no infrastructure.
 - Cluster integration tests: new slot in `tests/integration/` (ADR-0012), empty in the template apart from an ignored example; they need a staging environment with the peer services.
-- Coverage: bun threshold config → `just coverage` via cargo-llvm-cov (no threshold gate shipped — no CI yet).
+- Coverage: bun threshold config → `just coverage` via cargo-llvm-cov, plus `just coverage-check`: a 100% zero-uncovered gate over the unit + feature suite, with reason-bearing `coverage:ignore` markers for genuinely untestable lines and file exclusions for app/repository/infrastructure code owned by the component/acceptance suites (ADR-0013).
 - Test fixtures and helpers: ported where useful.
 
 ### Pact (composer addition → first-class)

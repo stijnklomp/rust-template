@@ -172,6 +172,23 @@ async fn create_note_rejects_an_overlong_note_with_problem_json_and_errors() {
 }
 
 #[tokio::test]
+async fn create_note_rejects_a_non_json_content_type_with_415() {
+    let server = app_with_notes(vec![]);
+
+    let response = server
+        .post("/v1/notes")
+        .text("note=plain text")
+        .content_type("text/plain")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(content_type(&response), Some(PROBLEM_JSON_CONTENT_TYPE));
+    let body = response.json::<serde_json::Value>();
+    assert_eq!(body["title"], "Unsupported Media Type");
+    assert_eq!(body["status"], 415);
+}
+
+#[tokio::test]
 async fn create_note_rejects_unknown_fields() {
     // Deliberate divergence from Fastify (which silently strips extra
     // properties): request DTOs are strict (`deny_unknown_fields`).

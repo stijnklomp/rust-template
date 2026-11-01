@@ -229,6 +229,48 @@ mod tests {
         );
     }
 
+    #[test]
+    fn problem_builder_overrides_type_and_title() {
+        let problem = Problem::new(StatusCode::BAD_REQUEST)
+            .with_type("https://example.com/problems/invalid")
+            .with_title("Invalid request");
+
+        assert_eq!(problem.type_uri, "https://example.com/problems/invalid");
+        assert_eq!(problem.title, "Invalid request");
+    }
+
+    #[test]
+    fn every_api_error_maps_to_its_status() {
+        let cases = [
+            (ApiError::NotFound, StatusCode::NOT_FOUND),
+            (
+                ApiError::BadRequest("bad".to_owned()),
+                StatusCode::BAD_REQUEST,
+            ),
+            (ApiError::Unauthorized, StatusCode::UNAUTHORIZED),
+            (ApiError::Forbidden, StatusCode::FORBIDDEN),
+            (
+                ApiError::Conflict("conflict".to_owned()),
+                StatusCode::CONFLICT,
+            ),
+            (
+                ApiError::ServiceUnavailable("down".to_owned()),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
+                ApiError::Internal {
+                    source: Box::new(std::io::Error::other("boom")),
+                },
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ];
+
+        for (error, expected) in cases {
+            assert_eq!(error.status(), expected);
+            assert_eq!(error.into_problem().status, expected.as_u16());
+        }
+    }
+
     #[tokio::test]
     async fn problem_response_is_problem_json() {
         let response = Problem::new(StatusCode::NOT_FOUND)

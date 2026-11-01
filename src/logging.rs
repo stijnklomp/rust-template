@@ -31,11 +31,13 @@ pub const REQUEST_LOG_TARGET: &str = "request";
 
 /// Installs the global subscriber: JSON on stdout, identical in every
 /// environment (ADR-0007).
+// coverage:ignore-start: installs the process-global subscriber; build_subscriber is unit-tested and main is acceptance-tested
 pub fn init(config: &AppConfig) -> Result<(), LoggingError> {
     build_subscriber(config.app_log_level, config.request_log_level, io::stdout)
         .try_init()
         .map_err(LoggingError)
 }
+// coverage:ignore-end
 
 /// Error installing the global subscriber.
 #[derive(Debug, thiserror::Error)]
@@ -168,7 +170,11 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
-    use super::test_support::run_capture;
+    use std::io::Write;
+
+    use tracing_subscriber::fmt::MakeWriter;
+
+    use super::test_support::{Capture, run_capture};
     use super::*;
 
     #[test]
@@ -216,6 +222,17 @@ mod tests {
                 .iter()
                 .any(|line| line["target"] == REQUEST_LOG_TARGET)
         );
+    }
+
+    #[test]
+    fn capture_writer_writes_and_flushes() {
+        let capture = Capture::new();
+        let mut writer = capture.make_writer();
+
+        writer.write_all(b"captured").unwrap();
+        writer.flush().unwrap();
+
+        assert_eq!(capture.contents(), "captured");
     }
 
     #[test]

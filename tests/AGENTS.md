@@ -24,7 +24,18 @@ Scope: everything under `tests/` and the test recipes. The root `AGENTS.md` hold
 | Integration | `tests/integration/` | cluster e2e with other deployed services; empty ignored example until one exists | manual (`E2E_BASE_URL`, `--run-ignored all`) | staging cluster |
 | Contract | `tests/pact/` | consumer/provider pacts (ADR-0008) | `just test-pact` | Postgres |
 
-`just check` is the fast gate (unit + feature + doctests, lint, sqlx cache, spec lock); `just integrity` adds the component, spec, compose black-box, pact and acceptance gates.
+`just check` is the fast gate (unit + feature + doctests, lint, sqlx cache, spec lock); `just integrity` adds the fast-suite coverage gate, component, spec, compose black-box, pact and acceptance gates.
+
+## Coverage
+
+`just coverage` runs the default nextest profile (unit + feature) and writes `lcov.info`; `just coverage-check` is the **100% fast-suite gate** (ADR-0013): every measured line must be covered. It runs in `just integrity`, not `just check` (coverage instrumentation is slower and needs `cargo-llvm-cov`).
+
+- The measured surface is unit + feature code. `src/main.rs`, `src/app.rs`, `src/bin/`, `src/repositories/`, `src/database.rs`, `src/amqp.rs`, `src/consumer.rs` and `src/infrastructure/` are excluded in `justfile`: their tests are the component/acceptance suites, or they are entrypoints.
+- For a line that genuinely cannot be exercised by the fast suite, add a reason-bearing marker:
+  - `// coverage:ignore: <reason>` for one line;
+  - `// coverage:ignore-start: <reason>` … `// coverage:ignore-end` for a block.
+- `scripts/coverage-check.sh` filters those lines from the LCOV report. Stable Rust has no line-level coverage exclusion, so this is the deliberate seam; do not use a marker to hide a line that a fast-suite test could cover, and do not add a business module to `coverage_ignore`.
+- This gate does not measure component/acceptance coverage. Those suites remain the evidence for real SQL, broker/cache and startup wiring.
 
 ## Key files
 
@@ -36,6 +47,7 @@ Scope: everything under `tests/` and the test recipes. The root `AGENTS.md` hold
 - `tests/feature/main.rs`, `tests/component/main.rs`, `tests/integration/main.rs` — one module tree per suite.
 - `tests/common/mod.rs` — broker/unique helpers for the component suite.
 - `tests/pact/` — consumer generation and provider verification.
+- `scripts/coverage-check.sh` — filters `coverage:ignore` markers from LCOV and enforces zero uncovered lines.
 
 ## Examples
 
@@ -80,7 +92,8 @@ Follow the demo slice: `tests/acceptance/specs/notes.feature` + `tests/acceptanc
 | `just test-pact` | Pact consumer generation + provider verification |
 | `just test-acceptance` | Component + in-process spec once against its own compose stack |
 | `just acceptance` | Idle compose stack: `docker compose --profile acceptance exec ...` |
-| `just coverage` | LCOV for the fast suite (`lcov.info`, gitignored) |
+| `just coverage` | LCOV for the fast suite (`lcov.info`, gitignored), with coverage markers filtered |
+| `just coverage-check` | 100% zero-uncovered fast-suite gate (runs `coverage` first) |
 | `just spec-check` / `just spec-approve` | Verify / re-approve `specs.lock` after human review |
 
 ## Pitfalls
@@ -88,6 +101,8 @@ Follow the demo slice: `tests/acceptance/specs/notes.feature` + `tests/acceptanc
 - Cucumber uses `harness = false`, which nextest cannot list: the spec target is behind `--features spec` and never runs under `cargo nextest`.
 - `SPEC_TARGET` switches the same specs to black-box: serial, no retries — a flake is a bug, not a retry.
 - The default nextest profile filters `binary(component)` out; component tests need `just test-component`.
+- `coverage-check` fails with `file:line` for every uncovered measured line; add a real test or a justified marker, not a lower threshold.
+- `coverage:ignore` markers are comments only; the filter script reads them from source, so an unmatched `ignore-start` fails the gate.
 - `docker compose down` needs the same `--profile` flag as `up` (`test`, `acceptance`, `blackbox`); a bare `down` is a no-op.
 
 ## Commit checklist

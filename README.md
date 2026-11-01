@@ -64,7 +64,8 @@ Health: `GET /healthz` → 204; `GET /readyz` → 204, or 503 while Postgres is 
 | `just test-pact` | Pact consumer generation + provider verification | Postgres on :5432 |
 | `just test-acceptance` | Component suite + in-process spec once, against its own compose stack; exits with the suite's status | Docker |
 | `just acceptance` | Idle acceptance stack for focused runs | Docker |
-| `just coverage` | LCOV report for the fast suite (`lcov.info`) | host toolchain |
+| `just coverage` | LCOV report for the fast suite (`lcov.info`), with coverage markers filtered | host toolchain + `cargo-llvm-cov` |
+| `just coverage-check` | 100% zero-uncovered fast-suite gate (runs `just coverage` first) | host toolchain + `cargo-llvm-cov` |
 
 The spec is the source of truth (ADR-0011). `tests/acceptance/specs/*.feature` is human-owned: edit it, have it reviewed, then run `just spec-approve` to refresh `tests/acceptance/specs.lock`. `just check` fails on an unapproved change, and an unbound step fails the run — a spec cannot silently stop being enforced. The same files run in-process (concurrent, unique data per scenario) and black-box over HTTP (serial, no retries).
 
