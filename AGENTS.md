@@ -64,6 +64,8 @@ Test recipes (`test-component`, `test-spec`, `test-blackbox`, `test-blackbox-com
 ## Scoped AGENTS.md
 
 - [`tests/AGENTS.md`](./tests/AGENTS.md) — test suites, commands, conventions and pitfalls for everything under `tests/`.
+- [`migrations/AGENTS.md`](./migrations/AGENTS.md) — schema-change rules and the offline-cache workflow.
+- [`docs/adr/AGENTS.md`](./docs/adr/AGENTS.md) — ADR numbering, style and supersession.
 
 ## Agent docs
 
