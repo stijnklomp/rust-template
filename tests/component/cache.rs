@@ -2,16 +2,17 @@
 
 use rust_template::infrastructure::cache::CacheClient;
 
-use crate::{cache_config, unique_label};
+use crate::cache_config;
+use crate::common::unique;
 
 #[tokio::test]
 async fn cache_round_trips_against_real_valkey() {
     let mut cache = CacheClient::connect(&cache_config())
         .await
-        .expect("the acceptance cache must be reachable");
+        .expect("the component cache must be reachable");
     assert!(cache.is_initialized(), "the client must have connected");
 
-    let key = format!("acceptance:{}", unique_label("cache"));
+    let key = format!("component:{}", unique("cache"));
     cache.set(&key, "value-1").await.expect("SET");
     assert_eq!(
         cache.get(&key).await.expect("GET"),

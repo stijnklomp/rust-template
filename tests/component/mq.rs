@@ -14,11 +14,11 @@ use rust_template::amqp::{AmqpClient, connect_and_declare};
 use rust_template::config::WorkerConfig;
 use rust_template::consumer::{Consumer, TaskError, TaskHandler};
 
-use crate::common::declare_dlq_probe;
-use crate::{rabbit_config, unique_label};
+use crate::common::{declare_dlq_probe, unique};
+use crate::rabbit_config;
 
-const SUCCESS_BODY: &str = r#"{"acceptance":"ok"}"#;
-const FAIL_BODY: &str = r#"{"acceptance":"fail"}"#;
+const SUCCESS_BODY: &str = r#"{"component":"ok"}"#;
+const FAIL_BODY: &str = r#"{"component":"fail"}"#;
 
 /// Records every body it handles and fails on [`FAIL_BODY`], so one test can
 /// drive both the success and the dead-letter path.
@@ -30,7 +30,7 @@ impl TaskHandler for RecordingHandler {
     async fn handle(&self, task: &str) -> Result<(), TaskError> {
         let _ = self.seen.send(task.to_owned());
         if task == FAIL_BODY {
-            return Err(TaskError::new("AcceptanceError", "acceptance failure"));
+            return Err(TaskError::new("ComponentError", "component failure"));
         }
         Ok(())
     }
@@ -101,11 +101,12 @@ async fn wait_for_empty_queue(channel: &lapin::Channel, queue: &str) {
 
 #[tokio::test]
 async fn publish_consume_and_dead_letter_flow_against_the_real_broker() {
+    let _guard = crate::BROKER.lock().await;
     let client = connect_and_declare(&rabbit_config())
         .await
         .expect("the acceptance broker must be reachable");
 
-    let queue = unique_label("acceptance-queue");
+    let queue = unique("component-queue");
     let binding_key = format!("acceptance.{queue}");
     let worker = WorkerConfig {
         queue: queue.clone(),
@@ -156,8 +157,8 @@ async fn publish_consume_and_dead_letter_flow_against_the_real_broker() {
     let payload = wait_for_dlq_message(&channel, &probe).await;
     let payload = serde_json::from_slice::<serde_json::Value>(&payload)
         .expect("the dead-letter payload must be JSON");
-    assert_eq!(payload["error"], "acceptance failure");
-    assert_eq!(payload["errorName"], "AcceptanceError");
+    assert_eq!(payload["error"], "component failure");
+    assert_eq!(payload["errorName"], "ComponentError");
     assert_eq!(payload["originalContent"], FAIL_BODY);
     assert_eq!(payload["queueName"], queue);
     let failed_at = payload["failedAt"]

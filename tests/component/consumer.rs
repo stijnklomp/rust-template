@@ -1,13 +1,11 @@
 //! Consumer + DLQ semantics against a live broker (ADR-0006).
 //!
-//! The broker-touching tests require the shared compose `infra` RabbitMQ on
-//! `localhost:5672` (guest/guest), like `tests/amqp.rs`.
+//! The broker-touching tests require the shared compose `infra` RabbitMQ
+//! (`localhost:5672`, guest/guest), like `tests/component/amqp.rs`.
 //!
 //! Every test runs on its own freshly declared queue name, so these tests
-//! never race the publisher tests in `tests/amqp.rs` for messages on
+//! never race the publisher tests in `tests/component/amqp.rs` for messages on
 //! `task_queue`.
-
-mod common;
 
 use std::time::{Duration, Instant};
 
@@ -19,10 +17,7 @@ use rust_template::amqp::connect_and_declare;
 use rust_template::config::WorkerConfig;
 use rust_template::consumer::{Consumer, TaskError, TaskHandler};
 
-use common::{broker, declare_dlq_probe, unique, verify_connection};
-
-/// Serializes tests that declare queues or observe the shared broker.
-static BROKER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+use crate::common::{broker, declare_dlq_probe, unique, verify_connection};
 
 /// The worker config these tests drive: a unique queue bound to `main` under
 /// a unique routing key, so nothing else on the shared broker interferes.
@@ -149,7 +144,7 @@ async fn wait_for_probe_message(channel: &lapin::Channel, queue: &str) -> Vec<u8
 
 #[tokio::test]
 async fn shutdown_waits_for_in_flight_handlers_and_leaves_no_orphan_consumer() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let queue = unique("t9-shutdown");
     let config = worker_config(&queue);
 
@@ -227,7 +222,7 @@ async fn shutdown_waits_for_in_flight_handlers_and_leaves_no_orphan_consumer() {
 
 #[tokio::test]
 async fn success_path_acks_without_a_dlq_entry() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let queue = unique("t9-success");
 
     let client = connect_and_declare(&broker())
@@ -288,7 +283,7 @@ async fn success_path_acks_without_a_dlq_entry() {
 
 #[tokio::test]
 async fn handler_failure_republishes_the_frozen_dlq_payload_then_acks() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let queue = unique("t9-failure");
     let config = worker_config(&queue);
 
@@ -359,7 +354,7 @@ async fn handler_failure_republishes_the_frozen_dlq_payload_then_acks() {
 
 #[tokio::test]
 async fn prefetch_one_holds_the_queue_while_the_handler_blocks() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let queue = unique("t9-prefetch-1");
     let config = WorkerConfig {
         prefetch: 1,
@@ -430,7 +425,7 @@ async fn prefetch_one_holds_the_queue_while_the_handler_blocks() {
 
 #[tokio::test]
 async fn prefetch_three_hands_out_three_while_the_handlers_block() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let queue = unique("t9-prefetch-3");
     let config = WorkerConfig {
         prefetch: 3,
@@ -499,7 +494,7 @@ async fn prefetch_three_hands_out_three_while_the_handlers_block() {
 
 #[tokio::test]
 async fn unparseable_payload_lands_in_the_dlq_and_the_consumer_keeps_running() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let queue = unique("t9-unparseable");
     let config = worker_config(&queue);
 

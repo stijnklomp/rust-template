@@ -1,6 +1,7 @@
 //! Library root for the service app.
 
 pub mod amqp;
+pub mod app;
 pub mod config;
 pub mod consumer;
 pub mod controllers;

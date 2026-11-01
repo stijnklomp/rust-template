@@ -1,10 +1,11 @@
-//! Request log capture, in a process of its own.
+//! Request log capture, isolated by request id.
 //!
 //! The subscriber is installed as the *global* default so callsite interest is
 //! computed against it no matter which test thread registers a callsite first
 //! (tracing's interest cache is process-global; thread-local subscribers race
 //! with other tests). Each test finds its log lines by request id, so the
-//! tests can run in parallel.
+//! tests can run in parallel. This module is the only global subscriber in the
+//! `feature` binary, and nextest runs each test in its own process anyway.
 
 use std::io;
 use std::sync::{Arc, Mutex, OnceLock};

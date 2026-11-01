@@ -1,8 +1,8 @@
-//! Helpers shared by the real-broker integration tests (`tests/amqp.rs`,
-//! `tests/consumer.rs`) and the acceptance suite (`tests/acceptance/mq.rs`).
-//! Integration-test crates cannot share modules through the library, so each
-//! `mod common;` compiles this file into its own test binary; every crate uses
-//! a subset, hence the blanket `dead_code` allowance.
+//! Helpers shared by the component tests (`tests/component/`) and the
+//! acceptance suite (`tests/acceptance/`). Integration-test crates cannot
+//! share modules through the library, so each `mod common;` compiles this file
+//! into its own test binary; every crate uses a subset, hence the blanket
+//! `dead_code` allowance.
 
 #![allow(dead_code)]
 

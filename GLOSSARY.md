@@ -32,12 +32,44 @@ _Avoid_: custom log, business log
 ## Testing
 
 **Fast suite**:
-The default nextest run — unit and feature tests, no infrastructure — plus doctests (`just test`). The acceptance suite and the real-broker integration tests are deliberately not in it.
+The default nextest run — unit and feature tests, no infrastructure — plus doctests (`just test`). The component and spec suites are deliberately not in it.
 _Avoid_: unit tests, default tests
 
-**Acceptance suite**:
-The feature-gated tests in `tests/acceptance/` that drive the real app against real Postgres, Valkey and RabbitMQ, through the compose `test`/`acceptance` profiles.
-_Avoid_: integration tests
+**Feature test**:
+A test in `tests/feature/` that drives one capability through the real router and middleware in-process, with hand-written fakes behind repository seams. No infrastructure.
+_Avoid_: integration test, API test
+
+**Component test**:
+A test in `tests/component/` that runs this service against its real Postgres, Valkey and RabbitMQ, with no other services involved. Serial, because the stack is shared (`just test-component`).
+_Avoid_: integration test
+
+**Spec**:
+A human-owned Gherkin file in `tests/acceptance/specs/` describing behaviour the service promises. The spec is the source of truth; code is the implementation. Changes need human approval and a `just spec-approve` lock update.
+_Avoid_: test case, scenario file
+
+**Spec suite**:
+The executable spec: the Gherkin files plus their step definitions, run by the Cucumber harness (`just test-spec`, `just test-blackbox`).
+_Avoid_: BDD tests, acceptance tests
+
+**Step definition**:
+The Rust function that implements one line of Gherkin. Lives in `tests/acceptance/steps/` and must not import `rust_template::`; only the driver knows the implementation.
+_Avoid_: step, glue
+
+**World**:
+The per-scenario state Cucumber constructs (`tests/acceptance/world.rs`): the driver, the unique run label and the response under assertion.
+_Avoid_: context, state
+
+**In-process acceptance**:
+The default spec mode: the real router over `axum-test` and the real stack, concurrent, migrations applied once (`just test-spec`).
+_Avoid_: local acceptance
+
+**Black-box acceptance**:
+The spec mode that drives a deployed service over HTTP via `SPEC_TARGET`, serially and without retries, for the per-push gate (`just test-blackbox <url>`).
+_Avoid_: e2e, end-to-end
+
+**Integration test**:
+A cluster end-to-end test in `tests/integration/`: this service plus other deployed services, against a staging environment. Empty in the template; ignored until a cluster exists.
+_Avoid_: acceptance test, component test
 
 ## Compose profiles
 

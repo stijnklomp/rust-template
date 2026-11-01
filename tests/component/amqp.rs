@@ -1,17 +1,16 @@
 //! AMQP publisher + topology against a live broker (ADR-0006).
 //!
-//! The broker-touching tests require the shared compose `infra` RabbitMQ on
-//! `localhost:5672` (guest/guest). The broker-restart scenario is `#[ignore]`d
-//! because it must be orchestrated from outside the container:
+//! The broker-touching tests require the compose `infra` RabbitMQ
+//! (`localhost:5672`, guest/guest; `RABBIT_*` when set). The broker-restart
+//! scenario is `#[ignore]`d because it must be orchestrated from outside the
+//! container:
 //!
 //! ```sh
-//! cargo test --test amqp survives_broker_restart -- --ignored --nocapture
+//! cargo test --test component survives_broker_restart -- --ignored --nocapture
 //! # wait for `PHASE1_DONE`, then, from the host:
 //! docker restart integration-rabbitmq-1
 //! touch target/amqp-restart-trigger
 //! ```
-
-mod common;
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -25,10 +24,7 @@ use lapin::types::{AMQPValue, FieldTable, LongString};
 
 use rust_template::amqp::AmqpClient;
 
-use common::{broker, unique, verify_connection};
-
-/// Serializes tests that mutate or observe the shared broker topology.
-static BROKER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+use crate::common::{broker, unique, verify_connection};
 
 fn table(entries: &[(&str, AMQPValue)]) -> FieldTable {
     let mut table = FieldTable::default();
@@ -78,7 +74,7 @@ async fn receive_matching(channel: &lapin::Channel, payload: &str) -> (String, S
 /// success proves the broker-side declaration matches exactly.
 #[tokio::test]
 async fn topology_matches_adr_0006_exactly() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let client = AmqpClient::connect(&broker()).await.expect("connect");
     client.declare_topology().await.expect("declare topology");
 
@@ -143,7 +139,7 @@ async fn topology_matches_adr_0006_exactly() {
 
 #[tokio::test]
 async fn confirmed_publish_routes_to_task_queue() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let client = AmqpClient::connect(&broker()).await.expect("connect");
     client.declare_topology().await.expect("declare topology");
 
@@ -165,7 +161,7 @@ async fn confirmed_publish_routes_to_task_queue() {
 
 #[tokio::test]
 async fn publish_declares_the_exchange_on_the_publish_path() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let client = AmqpClient::connect(&broker()).await.expect("connect");
     client.declare_topology().await.expect("declare topology");
 
@@ -200,7 +196,7 @@ async fn publish_declares_the_exchange_on_the_publish_path() {
 #[ignore = "restarts the shared broker; orchestrate with docker restart + target/amqp-restart-trigger"]
 #[tokio::test]
 async fn survives_broker_restart() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     let client = AmqpClient::connect(&broker()).await.expect("connect");
     client.declare_topology().await.expect("declare topology");
 
@@ -366,7 +362,7 @@ fn free_port() -> u16 {
 
 #[tokio::test]
 async fn sigterm_closes_the_amqp_connection_and_exits_cleanly() {
-    let _guard = BROKER.lock().await;
+    let _guard = crate::BROKER.lock().await;
     // Same convention as `broker()`: the shared host-side stack by default,
     // `RABBIT_HOST`/`RABBIT_PORT` when set (e.g. the compose acceptance run).
     let host = std::env::var("RABBIT_HOST").unwrap_or_else(|_| "localhost".to_owned());

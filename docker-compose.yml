@@ -13,20 +13,23 @@
 #     infra + a published image, no build (ADR-0009).
 #
 #   docker compose --profile test up --build --attach acceptance-once --exit-code-from acceptance-once
-#     infra + a one-shot runner: the acceptance suite runs once and the stack
-#     exits with the suite's status code (`just test-acceptance`). The stack
-#     stops with the runner; `docker compose --profile test down -v` removes
-#     containers and volumes. Every service is profile-gated, so `down` takes
-#     the same --profile flag as `up` (a bare `down` is a no-op).
+#     infra + a one-shot runner: the acceptance suite (component tests plus the
+#     in-process BDD spec) runs once and the stack exits with the suite's
+#     status code (`just test-acceptance`). The stack stops with the runner;
+#     `docker compose --profile test down -v` removes containers and volumes.
+#     Every service is profile-gated, so `down` takes the same --profile flag
+#     as `up` (a bare `down` is a no-op).
 #
 #   docker compose --profile acceptance up -d --wait
 #     infra + an idle runner (`just acceptance`). Exec in to run all tests, a
 #     single nextest-filtered test, or debug:
 #
 #       docker compose --profile acceptance exec acceptance \
-#         cargo nextest run --features acceptance --profile acceptance
+#         cargo nextest run --profile component
 #       docker compose --profile acceptance exec acceptance \
-#         cargo nextest run --features acceptance --profile acceptance -E 'test(cache_round_trips)'
+#         cargo test --features spec --test spec
+#       docker compose --profile acceptance exec acceptance \
+#         SPEC_TARGET=http://app:3000 cargo test --features spec --test spec
 #       docker compose --profile acceptance down -v
 #
 # Service keys mirror the Fastify template (db / cache / rabbitmq), which keeps the committed
@@ -68,6 +71,9 @@ x-acceptance: &acceptance
     PATH: /app/.acceptance/cargo-home/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/bin:/bin
     # In-network endpoints (compose DNS), independent of host port remaps.
     DATABASE_URL: postgres://${DATABASE_USERNAME:-dev}:${DATABASE_PASSWORD:-admin123}@db:5432/${DATABASE_DB:-fastify}
+    # The acceptance app must exercise the real cache path, so override the
+    # `.env.development` gate (process env wins over env files).
+    CACHE_DISABLED: "false"
     CACHE_HOST: cache
     CACHE_PORT: "6379"
     CACHE_PASSWORD: ${CACHE_PASSWORD:-admin123}
@@ -223,19 +229,20 @@ services:
         condition: service_healthy
 
   # One-shot acceptance run (compose `test` profile): install nextest if the
-  # host cache does not have it yet, run the suite once, exit with its status
-  # code. `just test-acceptance`.
+  # host cache does not have it yet, run the component suite and the in-process
+  # spec suite once, exit with their status code. `just test-acceptance`.
   acceptance-once:
     <<: *acceptance
     profiles: [test]
     command: >
       sh -c "command -v cargo-nextest >/dev/null 2>&1 ||
       cargo install --locked cargo-nextest --version 0.9.148;
-      exec cargo nextest run --features acceptance --profile acceptance"
+      cargo nextest run --profile component &&
+      exec cargo test --features spec --test spec"
 
   # Idle acceptance stack (compose `acceptance` profile) for exec-driven runs
   # and debugging. The healthcheck only passes once the runner can actually
-  # execute the suite (nextest installed, pinned toolchain resolved), so
+  # run the component suite (nextest installed, pinned toolchain resolved), so
   # `up -d --wait` is safe to follow with an exec.
   acceptance:
     <<: *acceptance
@@ -246,7 +253,11 @@ services:
       cd /app && cargo --version >/dev/null 2>&1;
       exec sleep infinity"
     healthcheck:
-      test: ["CMD-SHELL", "cd /app && cargo nextest --version >/dev/null 2>&1"]
+      # Never invoke cargo/rustup here: the healthcheck runs concurrently with
+      # the first-start install, and two rustup processes race on the shared
+      # RUSTUP_HOME. The nextest binary only exists after the toolchain and
+      # install finished, so testing for it is the safe readiness probe.
+      test: ["CMD-SHELL", "test -x /app/.acceptance/cargo-home/bin/cargo-nextest"]
       interval: 10s
       timeout: 10s
       retries: 60

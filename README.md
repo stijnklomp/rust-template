@@ -11,7 +11,7 @@ A Rust microservice template: a single service app (axum + tokio) that ports the
 - **AMQP** — lapin publisher and a tested consumer module with the frozen always-ack/DLQ semantics (ADR-0006). Dedicated consumer deployments are a per-service recipe (ADR-0002).
 - **Logging** — JSON on stdout in every environment, with independent `REQUEST_LOG_LEVEL` and `APP_LOG_LEVEL` filters (ADR-0007).
 - **Lifecycle** — graceful shutdown drains HTTP, cancels consumers and closes pools; `GET /healthz` (liveness) and `GET /readyz` (readiness with a live database check).
-- **Testing** — unit/feature tests (nextest + axum-test), pact contract tests on both sides (ADR-0008), acceptance tests against real Postgres/Valkey/RabbitMQ.
+- **Testing** — unit tests inline, feature tests (nextest + axum-test), component tests against real Postgres/Valkey/RabbitMQ, an executable Gherkin spec with in-process and black-box modes (ADR-0011), pact contract tests on both sides (ADR-0008), and an empty cluster-e2e slot (ADR-0012).
 - **Containers** — cargo-chef build → distroless `nonroot` runtime (ADR-0009); compose profiles for every flow; multi-arch publishes; plain `k8s/` manifests.
 - **Supply chain** — cargo-deny (licenses, advisories, bans, sources), CycloneDX SBOM, cargo-auditable release binaries.
 - **Demo slice** — the notes routes, their tests and the seed tooling are marked `example — remove when building your service`; they show the full layering end-to-end and are meant to be deleted.
@@ -56,19 +56,27 @@ Health: `GET /healthz` → 204; `GET /readyz` → 204, or 503 while Postgres is 
 | Command | Runs | Needs |
 | --- | --- | --- |
 | `just test` | Fast suite: unit + feature tests (nextest) and doctests | nothing |
+| `just test-component` | Component suite: this service against real Postgres/Valkey/RabbitMQ | infra stack |
+| `just test-spec` | The executable spec, in-process and concurrent | Postgres on :5432 |
+| `just test-blackbox <url>` | The same spec, black-box and serial, against a deployed service | a deployment |
+| `just spec-check` | Fail when a spec changed without human approval | nothing |
 | `just test-pact` | Pact consumer generation + provider verification | Postgres on :5432 |
-| `just test-acceptance` | Acceptance suite once, against its own compose stack; exits with the suite's status | Docker |
+| `just test-acceptance` | Component suite + in-process spec once, against its own compose stack; exits with the suite's status | Docker |
 | `just acceptance` | Idle acceptance stack for focused runs | Docker |
 | `just coverage` | LCOV report for the fast suite (`lcov.info`) | host toolchain |
 
-`just check` runs the fast gates — formatting, clippy with warnings denied, the sqlx offline-cache check and the fast suite. `just integrity` runs every gate end-to-end and stops at the first failure.
+The spec is the source of truth (ADR-0011). `tests/acceptance/specs/*.feature` is human-owned: edit it, have it reviewed, then run `just spec-approve` to refresh `tests/acceptance/specs.lock`. `just check` fails on an unapproved change, and an unbound step fails the run — a spec cannot silently stop being enforced. The same files run in-process (concurrent, unique data per scenario) and black-box over HTTP (serial, no retries).
+
+`just check` runs the fast gates — formatting, clippy with warnings denied, the sqlx offline-cache check, the spec-approval lock and the fast suite. `just integrity` runs every gate end-to-end and stops at the first failure.
 
 Focused acceptance runs, against the idle stack:
 
 ```bash
 just acceptance
 docker compose --profile acceptance exec acceptance \
-  cargo nextest run --features acceptance --profile acceptance -E 'test(cache_round_trips)'
+  cargo nextest run --profile component
+docker compose --profile acceptance exec acceptance \
+  cargo test --features spec --test spec
 docker compose --profile acceptance down -v
 ```
 

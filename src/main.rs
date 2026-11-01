@@ -3,16 +3,12 @@
 
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::Arc;
 
 use rust_template::amqp;
+use rust_template::app::Infrastructure;
 use rust_template::config::AppConfig;
-use rust_template::database::Database;
-use rust_template::infrastructure::cache::CacheClient;
 use rust_template::openapi;
-use rust_template::repositories::notes::PgNotesRepository;
-use rust_template::server::{self, AppState};
-use rust_template::services::notes::NotesService;
+use rust_template::server;
 use rust_template::shutdown;
 use rust_template::{APP_NAME, APP_VERSION, logging};
 
@@ -44,33 +40,19 @@ async fn main() -> ExitCode {
     // (Fastify parity: `cacheClient.init()` precedes `app.listen`) and a
     // connection failure is a startup error. The database pool connects lazily:
     // the service starts (and `/readyz` reports 503) while Postgres is down.
-    let mut cache = match CacheClient::connect(&config.cache).await {
-        Ok(cache) => cache,
+    // `Infrastructure::build` is shared with the acceptance suite, so tests
+    // boot the same composition as the service (ADR-0011).
+    let Infrastructure {
+        state,
+        database,
+        mut cache,
+    } = match Infrastructure::build(&config).await {
+        Ok(infrastructure) => infrastructure,
         Err(error) => {
-            tracing::error!(error = %error, "failed to initialize the cache client");
+            tracing::error!(error = %error, "failed to initialize infrastructure");
             return ExitCode::FAILURE;
         }
     };
-
-    let database = match Database::connect_lazy(&config.database_url) {
-        Ok(database) => database,
-        Err(error) => {
-            tracing::error!(error = %error, "invalid DATABASE_URL");
-            return ExitCode::FAILURE;
-        }
-    };
-    tracing::info!("database pool configured");
-
-    let mut state = AppState {
-        cache: cache.clone(),
-        ..AppState::default()
-    };
-    state.readiness.register(database.clone());
-    state.database = Some(database.clone());
-    // example — remove when building your service (notes demo slice)
-    state.notes = Some(Arc::new(NotesService::new(Arc::new(
-        PgNotesRepository::new(database.pool().clone()),
-    ))));
     let router = server::build_router(state);
 
     // ADR-0004: the OpenAPI document is generated from the code and written on

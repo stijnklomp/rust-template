@@ -9,7 +9,7 @@ default:
     @just --list
 
 # Run every fast local gate (`sqlx-check` needs the infra database on localhost:5432).
-check: fmt-check lint sqlx-check test
+check: fmt-check lint sqlx-check spec-check test
 
 # Format the crate.
 fmt:
@@ -38,8 +38,67 @@ test:
     cargo nextest run
     cargo test --doc
 
+# Component suite: this service against real Postgres/Valkey/RabbitMQ (serial).
+test-component:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export DATABASE_URL="${DATABASE_URL:-postgres://dev:admin123@localhost:5432/fastify}"
+    export CACHE_HOST="${CACHE_HOST:-localhost}"
+    export CACHE_PORT="${CACHE_PORT:-6379}"
+    export CACHE_PASSWORD="${CACHE_PASSWORD:-admin123}"
+    export RABBIT_HOST="${RABBIT_HOST:-localhost}"
+    export RABBIT_PORT="${RABBIT_PORT:-5672}"
+    export RABBIT_USER="${RABBIT_USER:-guest}"
+    export RABBIT_PASSWORD="${RABBIT_PASSWORD:-guest}"
+    cargo nextest run --profile component
+
+# Acceptance spec, in-process, concurrent, migrations applied once.
+test-spec:
+    cargo test --features spec --test spec
+
+# Acceptance spec, black-box against a deployed service (serial).
+# Usage: `just test-blackbox http://localhost:3000`.
+test-blackbox target:
+    SPEC_TARGET={{target}} cargo test --features spec --test spec
+
+# Fail when a spec changed without human approval.
+spec-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd tests/acceptance/specs
+    fail() {
+        echo "specs changed: a human must review them, then run 'just spec-approve'" >&2
+        exit 1
+    }
+    expected="$(find . -maxdepth 1 -name '*.feature' -printf '%P\n' | sort)"
+    [ -n "$expected" ] || { echo "no .feature files found" >&2; exit 1; }
+    listed="$(sed -n 's/^[0-9a-f]\{64\}  //p' specs.lock | sort)"
+    [ "$expected" = "$listed" ] || {
+        echo "specs.lock does not list the current spec files" >&2
+        fail
+    }
+    sha256sum --check --quiet specs.lock || fail
+    if grep -rn --include='*.rs' 'rust_template::' ../steps >/dev/null 2>&1; then
+        echo "step definitions must not import rust_template:: (the spec must survive a rewrite)" >&2
+        exit 1
+    fi
+
+# Re-approve the specs after human review (rewrites specs.lock).
+spec-approve:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd tests/acceptance/specs
+    {
+        echo "# Approved specs — regenerate only after human review: just spec-approve"
+        find . -maxdepth 1 -name '*.feature' -printf '%P\n' | sort | xargs -r sha256sum
+    } > specs.lock.tmp
+    mv specs.lock.tmp specs.lock
+    echo "specs.lock updated; review the diff before committing"
+
 # Run the acceptance suite once against its own compose stack, exiting with
 # the suite's status code (starts infra + the runner, then stops the stack).
+# The runner executes the component suite (nextest) and the in-process spec
+# suite (Cucumber).
 # `HOST_UID`/`HOST_GID` make the runner write as the invoking user; bare
 # `docker compose` defaults them to 1000. Host ports are remappable when
 # another stack is up, e.g.
@@ -49,9 +108,11 @@ test-acceptance:
 
 # Bring the acceptance stack up and idle for exec-driven runs, e.g.
 #   docker compose --profile acceptance exec acceptance \
-#     cargo nextest run --features acceptance --profile acceptance
+#     cargo nextest run --profile component
 #   docker compose --profile acceptance exec acceptance \
-#     cargo nextest run --features acceptance --profile acceptance -E 'test(<name>)'
+#     cargo test --features spec --test spec
+#   docker compose --profile acceptance exec acceptance \
+#     SPEC_TARGET=http://app:3000 cargo test --features spec --test spec
 # Tear down with `docker compose --profile acceptance down -v`.
 acceptance:
     HOST_UID=`id -u` HOST_GID=`id -g` docker compose --profile acceptance up -d --wait
@@ -150,12 +211,14 @@ sqlx-check:
 # --- Integrity (ADR-0010) ----------------------------------------------------
 
 # Run every gate end-to-end, aborting at the first failure: formatting, lint,
-# the `.sqlx` offline-cache check, the fast suite, cargo-deny, the SBOM +
-# auditable release build, pact verification, acceptance. `sqlx-check` and
-# `test-pact` need Postgres on localhost:5432 (`docker compose --profile infra
-# up -d`); `licenses` needs network access for the RustSec advisory database
-# (cached after the first fetch); `test-acceptance` drives its own compose
-# stack — remap its host ports, e.g.
+# the `.sqlx` offline-cache check, the spec-approval lock, the fast suite, the
+# component suite, the in-process spec suite, cargo-deny, the SBOM + auditable
+# release build, pact verification, acceptance. `sqlx-check`, `test-pact`,
+# `test-component` and `test-spec` need the infra stack on localhost:5432/
+# 6379/5672 (`docker compose --profile infra up -d`); `licenses` needs network
+# access for the RustSec advisory database (cached after the first fetch);
+# `test-acceptance` drives its own compose stack — remap its host ports, e.g.
 # `DATABASE_PORT=15432 CACHE_PORT=16379 RABBIT_PORT=15673 RABBIT_MGMT_PORT=15674
 # just integrity`, when another stack is already using the defaults.
-integrity: fmt-check lint sqlx-check test licenses sbom test-pact test-acceptance
+# `test-blackbox` is deliberately not here: it needs a deployed service.
+integrity: fmt-check lint sqlx-check spec-check test licenses sbom test-pact test-component test-spec test-acceptance
