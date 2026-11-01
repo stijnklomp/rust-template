@@ -4,3 +4,9 @@ pre-commit:
       glob: "*.rs"
       run: cargo fmt -- {staged_files}
       stage_fixed: true
+    # Specs are human-owned (ADR-0011): a `.feature` edit must be approved with
+    # `just spec-approve` before it can be committed. Also guards the
+    # `rust_template::` boundary for step definitions.
+    spec-lock:
+      glob: "tests/acceptance/**"
+      run: just spec-check

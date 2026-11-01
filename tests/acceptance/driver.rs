@@ -184,13 +184,16 @@ fn normalize(status: u16, content_type: String, text: String) -> SpecResponse {
 }
 
 /// Blocks a black-box run until `/readyz` answers 204, bounded by a deadline.
+///
+/// The deadline is generous because the compose black-box profile builds the
+/// app from source on a cold cache; a deployed service answers immediately.
 pub async fn wait_until_ready(base_url: &str) {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
         .expect("the readiness client must build");
     let url = format!("{}/readyz", base_url.trim_end_matches('/'));
-    let deadline = Instant::now() + Duration::from_secs(60);
+    let deadline = Instant::now() + Duration::from_secs(180);
 
     loop {
         match client.get(&url).send().await {

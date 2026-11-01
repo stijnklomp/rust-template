@@ -61,6 +61,12 @@ test-spec:
 test-blackbox target:
     SPEC_TARGET={{target}} cargo test --features spec --test spec
 
+# Acceptance spec, black-box against the compose-hosted app (serial). Builds
+# the app from mounted source, waits for `/readyz`, runs the same features and
+# exits with the suite's status; the stack aborts with the runner.
+test-blackbox-compose:
+    HOST_UID=`id -u` HOST_GID=`id -g` docker compose --profile blackbox up --attach blackbox-once --exit-code-from blackbox-once
+
 # Fail when a spec changed without human approval.
 spec-check:
     #!/usr/bin/env bash
@@ -166,7 +172,7 @@ docker-publish image=env("IMAGE", "rust-template:latest"):
 openapi:
     cargo run --quiet --bin openapi
 
-# --- Database (sqlx-cli, ADR-0003) ------------------------------------------
+# --- Database (ADR-0003) ----------------------------------------------------
 
 # CLI recipes fall back to the committed dev value when the real environment and
 # `.env` (dotenv-load) leave DATABASE_URL unset.
@@ -177,7 +183,7 @@ migrate:
     #!/usr/bin/env bash
     set -euo pipefail
     export DATABASE_URL="${DATABASE_URL:-{{dev_database_url}}}"
-    SQLX_OFFLINE=false cargo sqlx migrate run
+    cargo run --bin migrate
 
 # Drop and recreate the database, then run every migration (destructive).
 db-reset:
@@ -212,13 +218,14 @@ sqlx-check:
 
 # Run every gate end-to-end, aborting at the first failure: formatting, lint,
 # the `.sqlx` offline-cache check, the spec-approval lock, the fast suite, the
-# component suite, the in-process spec suite, cargo-deny, the SBOM + auditable
-# release build, pact verification, acceptance. `sqlx-check`, `test-pact`,
-# `test-component` and `test-spec` need the infra stack on localhost:5432/
-# 6379/5672 (`docker compose --profile infra up -d`); `licenses` needs network
-# access for the RustSec advisory database (cached after the first fetch);
-# `test-acceptance` drives its own compose stack — remap its host ports, e.g.
+# component suite, the in-process spec suite, the compose black-box suite,
+# cargo-deny, the SBOM + auditable release build, pact verification,
+# acceptance. `sqlx-check`, `test-pact`, `test-component` and `test-spec` need
+# the infra stack on localhost:5432/6379/5672 (`docker compose --profile infra
+# up -d`); `licenses` needs network access for the RustSec advisory database
+# (cached after the first fetch); `test-blackbox-compose` and
+# `test-acceptance` drive their own compose stacks — remap host ports, e.g.
 # `DATABASE_PORT=15432 CACHE_PORT=16379 RABBIT_PORT=15673 RABBIT_MGMT_PORT=15674
 # just integrity`, when another stack is already using the defaults.
-# `test-blackbox` is deliberately not here: it needs a deployed service.
-integrity: fmt-check lint sqlx-check spec-check test licenses sbom test-pact test-component test-spec test-acceptance
+# `test-blackbox <url>` is deliberately not here: it needs a deployed service.
+integrity: fmt-check lint sqlx-check spec-check test licenses sbom test-pact test-component test-spec test-blackbox-compose test-acceptance

@@ -13,6 +13,7 @@ Everything runs through `just` (ADR-0010: the recipes are the gates; there are n
 | `just test-component` | Component suite: this service against real Postgres/Valkey/RabbitMQ. Needs the infra stack. |
 | `just test-spec` | Acceptance spec, in-process and concurrent. Needs Postgres. |
 | `just test-blackbox <url>` | The same spec, black-box against a deployed service (serial). |
+| `just test-blackbox-compose` | The same spec, black-box against the compose-hosted app (serial). |
 | `just spec-check` / `just spec-approve` | Verify / re-approve `tests/acceptance/specs.lock` after a human reviewed the spec diff. |
 | `just fmt` / `just fmt-check` | Format the crate / check formatting. |
 | `just lint` | Clippy with `-D warnings`. |
@@ -43,9 +44,9 @@ Everything runs through `just` (ADR-0010: the recipes are the gates; there are n
 - `src/main.rs` — wiring only: config → logging → `app::Infrastructure` → router → serve → cleanup.
 - `src/app.rs` — `Infrastructure::build`, the composition shared by `main` and the in-process spec driver.
 - `src/lib.rs` — `routes` → `controllers` → `services` → `repositories` (+ `models` DTOs), `infrastructure/` (cache), `amqp.rs` + `consumer.rs`, `config.rs`, `logging.rs`, `problem.rs` (RFC 9457), `health.rs`, `server.rs`, `shutdown.rs`, `openapi.rs`.
-- `src/bin/` — `openapi` (writes `openapi.yaml`), `db_seed` (demo tooling).
+- `src/bin/` — `openapi` (writes `openapi.yaml`), `migrate` (applies embedded migrations, no sqlx CLI), `db_seed` (demo tooling).
 - `tests/feature/` — in-process feature tests (fakes, no infra); `tests/component/` — real datastores/broker; `tests/acceptance/` — the Cucumber spec (`runner.rs`, `driver.rs`, `world.rs`, `steps/`, `specs/`); `tests/integration/` — cluster e2e example (ignored); `tests/pact/` — contracts.
-- `migrations/`, `docker-compose.yml` (profiles: infra/dev/local/publish/test/acceptance), `k8s/` (plain manifests), `pacts/` (checked-in contracts), `examples/`.
+- `migrations/`, `docker-compose.yml` (profiles: infra/dev/local/publish/test/acceptance/blackbox), `k8s/` (plain manifests), `pacts/` (checked-in contracts), `examples/`.
 
 ## Pitfalls
 

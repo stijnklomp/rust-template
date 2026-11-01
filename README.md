@@ -59,6 +59,7 @@ Health: `GET /healthz` → 204; `GET /readyz` → 204, or 503 while Postgres is 
 | `just test-component` | Component suite: this service against real Postgres/Valkey/RabbitMQ | infra stack |
 | `just test-spec` | The executable spec, in-process and concurrent | Postgres on :5432 |
 | `just test-blackbox <url>` | The same spec, black-box and serial, against a deployed service | a deployment |
+| `just test-blackbox-compose` | The same spec, black-box and serial, against the compose-hosted app | Docker |
 | `just spec-check` | Fail when a spec changed without human approval | nothing |
 | `just test-pact` | Pact consumer generation + provider verification | Postgres on :5432 |
 | `just test-acceptance` | Component suite + in-process spec once, against its own compose stack; exits with the suite's status | Docker |
@@ -77,6 +78,8 @@ docker compose --profile acceptance exec acceptance \
   cargo nextest run --profile component
 docker compose --profile acceptance exec acceptance \
   cargo test --features spec --test spec
+docker compose --profile acceptance exec acceptance \
+  SPEC_TARGET=http://app:3000 cargo test --features spec --test spec
 docker compose --profile acceptance down -v
 ```
 
@@ -93,7 +96,8 @@ Compose profiles cover every flow:
 | `local` | `docker compose --profile local up --build` | infra + the app built from the Dockerfile |
 | `publish` | `IMAGE=registry/app:tag docker compose --profile publish up` | infra + a published image, no build |
 | `test` | `just test-acceptance` | infra + a one-shot acceptance runner |
-| `acceptance` | `just acceptance` | infra + an idle runner for exec-driven runs |
+| `acceptance` | `just acceptance` | infra + an idle runner and the app under test, for exec-driven runs |
+| `blackbox` | `just test-blackbox-compose` | infra + the app + a one-shot black-box spec runner |
 
 Every service is profile-gated, so `down` takes the same `--profile` flag as `up` (a bare `docker compose down` is a no-op here). Published ports are remappable through the environment (`API_PORT`, `DATABASE_PORT`, `CACHE_PORT`, `RABBIT_PORT`, `RABBIT_MGMT_PORT`), so this stack can run next to another one.
 

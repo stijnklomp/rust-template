@@ -9,6 +9,7 @@ description: Use when writing or running tests, or when deciding whether a test 
 - `just test-component` — this service against real Postgres/Valkey/RabbitMQ (serial). Needs the compose `infra` profile.
 - `just test-spec` — the executable spec (`tests/acceptance/specs/*.feature`), in-process and concurrent. Needs Postgres.
 - `just test-blackbox <url>` — the same spec against a deployed service, serial, no retries.
+- `just test-blackbox-compose` — the same spec against the compose-hosted app (built from source), serial.
 - `just test-pact` — contract tests, both sides. Needs Postgres.
 - `just test-acceptance` — component + in-process spec through the compose `test` profile, once. `just acceptance` leaves that stack idle for focused exec runs.
 - `just check` is the pre-finish gate; `just coverage` writes LCOV.

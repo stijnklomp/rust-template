@@ -21,8 +21,9 @@
 #     as `up` (a bare `down` is a no-op).
 #
 #   docker compose --profile acceptance up -d --wait
-#     infra + an idle runner (`just acceptance`). Exec in to run all tests, a
-#     single nextest-filtered test, or debug:
+#     infra + an idle runner + the app under test (`just acceptance`). Exec in
+#     to run all tests, a single nextest-filtered test, a black-box run against
+#     `http://app:3000`, or debug:
 #
 #       docker compose --profile acceptance exec acceptance \
 #         cargo nextest run --profile component
@@ -31,6 +32,12 @@
 #       docker compose --profile acceptance exec acceptance \
 #         SPEC_TARGET=http://app:3000 cargo test --features spec --test spec
 #       docker compose --profile acceptance down -v
+#
+#   docker compose --profile blackbox up --attach blackbox-once --exit-code-from blackbox-once
+#     infra + the app built from mounted source + a one-shot runner that drives
+#     the *same* spec suite over HTTP against `http://app:3000` and exits with
+#     its status code (`just test-blackbox-compose`). This is the local and
+#     pipeline black-box gate; `just test-blackbox <url>` targets a deployment.
 #
 # Service keys mirror the Fastify template (db / cache / rabbitmq), which keeps the committed
 # .env.development values coherent (CACHE_HOST=cache, RABBIT_HOST=rabbitmq) and the dev
@@ -49,7 +56,23 @@ x-infra: &infra
   restart: always
   # Every profile that needs the infra stack lists itself here: compose refuses
   # `depends_on` targets that the active profiles disable.
-  profiles: [infra, dev, local, publish, test, acceptance]
+  profiles: [infra, dev, local, publish, test, acceptance, blackbox]
+
+# In-network endpoints shared by every app/runner instance (compose DNS,
+# independent of host port remaps). The cache gate is overridden because the
+# acceptance/black-box app must exercise the real cache path (process env wins
+# over `.env.development`).
+x-service-env: &service-env
+  DATABASE_URL: postgres://${DATABASE_USERNAME:-dev}:${DATABASE_PASSWORD:-admin123}@db:5432/${DATABASE_DB:-fastify}
+  CACHE_DISABLED: "false"
+  CACHE_HOST: cache
+  CACHE_PORT: "6379"
+  CACHE_PASSWORD: ${CACHE_PASSWORD:-admin123}
+  RABBIT_HOST: rabbitmq
+  RABBIT_PORT: "5672"
+  RABBIT_USER: ${RABBIT_USER:-guest}
+  RABBIT_PASSWORD: ${RABBIT_PASSWORD:-guest}
+  RABBIT_TRANSPORT: amqp
 
 # Acceptance runner (profiles test + acceptance): the rust toolchain image
 # over mounted source — ticket #12's built image replaces this once it exists.
@@ -64,24 +87,12 @@ x-acceptance: &acceptance
   working_dir: /app
   user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   environment:
+    <<: *service-env
     # Toolchain and crate caches live under the mounted tree (gitignored).
     CARGO_HOME: /app/.acceptance/cargo-home
     RUSTUP_HOME: /app/.acceptance/rustup-home
     # cargo-nextest installs into $CARGO_HOME/bin, which is not in the image PATH.
     PATH: /app/.acceptance/cargo-home/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/bin:/bin
-    # In-network endpoints (compose DNS), independent of host port remaps.
-    DATABASE_URL: postgres://${DATABASE_USERNAME:-dev}:${DATABASE_PASSWORD:-admin123}@db:5432/${DATABASE_DB:-fastify}
-    # The acceptance app must exercise the real cache path, so override the
-    # `.env.development` gate (process env wins over env files).
-    CACHE_DISABLED: "false"
-    CACHE_HOST: cache
-    CACHE_PORT: "6379"
-    CACHE_PASSWORD: ${CACHE_PASSWORD:-admin123}
-    RABBIT_HOST: rabbitmq
-    RABBIT_PORT: "5672"
-    RABBIT_USER: ${RABBIT_USER:-guest}
-    RABBIT_PASSWORD: ${RABBIT_PASSWORD:-guest}
-    RABBIT_TRANSPORT: amqp
   volumes:
     - .:/app
   depends_on:
@@ -227,6 +238,61 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+
+  # One-shot migration job for the black-box/acceptance profiles. The app and
+  # the black-box runner wait for it, so a fresh Postgres volume is never
+  # served with an empty schema. `just migrate` runs the same binary.
+  migrate:
+    <<: *acceptance
+    profiles: [acceptance, blackbox]
+    command: cargo run --bin migrate
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # The service under test for black-box runs (`just test-blackbox-compose`,
+  # or the idle `acceptance` stack). Built from mounted source and run in
+  # production mode, so startup never rewrites the committed openapi.yaml.
+  # The black-box runner polls `/readyz` before the first scenario.
+  app:
+    <<: *acceptance
+    profiles: [acceptance, blackbox]
+    environment:
+      <<: *service-env
+      CARGO_HOME: /app/.acceptance/cargo-home
+      RUSTUP_HOME: /app/.acceptance/rustup-home
+      PATH: /app/.acceptance/cargo-home/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/bin:/bin
+      APP_ENV: production
+      API_PORT: "3000"
+    command: >
+      sh -c "cargo build --bin rust-template &&
+      exec ./target/debug/rust-template"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # One-shot black-box spec run (compose `blackbox` profile):
+  # `just test-blackbox-compose`. The same Gherkin features run over HTTP
+  # against `app:3000`, serially, after the runner's bounded `/readyz` poll.
+  blackbox-once:
+    <<: *acceptance
+    profiles: [blackbox]
+    environment:
+      <<: *service-env
+      CARGO_HOME: /app/.acceptance/cargo-home
+      RUSTUP_HOME: /app/.acceptance/rustup-home
+      PATH: /app/.acceptance/cargo-home/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/bin:/bin
+      SPEC_TARGET: http://app:3000
+    depends_on:
+      app:
+        condition: service_started
+    command: cargo test --features spec --test spec
 
   # One-shot acceptance run (compose `test` profile): install nextest if the
   # host cache does not have it yet, run the component suite and the in-process

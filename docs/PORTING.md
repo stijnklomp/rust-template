@@ -78,7 +78,7 @@ Ground rules:
 
 - Unit tests: module mocking + `bun-mock-prisma` → in-crate tests with hand-written fakes behind traits (no module mocking in Rust).
 - Feature tests: `app.inject` → axum-test, in-process, in `tests/feature/` (ADR-0012).
-- Acceptance tests: empty scaffolding in TS → a Gherkin executable spec in `tests/acceptance/` run by Cucumber (ADR-0011), in-process and concurrent by default, and black-box/serial against a deployed service via `SPEC_TARGET`. Component tests (`tests/component/`) cover this service against its real Postgres/Valkey/RabbitMQ; the default profile (`just test` = `cargo nextest run` + `cargo test --doc`) needs no infrastructure.
+- Acceptance tests: empty scaffolding in TS → a Gherkin executable spec in `tests/acceptance/` run by Cucumber (ADR-0011), in-process and concurrent by default, and black-box/serial against a deployed service or the compose-hosted app via `SPEC_TARGET` (`just test-blackbox`, `just test-blackbox-compose`). Component tests (`tests/component/`) cover this service against its real Postgres/Valkey/RabbitMQ; the default profile (`just test` = `cargo nextest run` + `cargo test --doc`) needs no infrastructure.
 - Cluster integration tests: new slot in `tests/integration/` (ADR-0012), empty in the template apart from an ignored example; they need a staging environment with the peer services.
 - Coverage: bun threshold config → `just coverage` via cargo-llvm-cov (no threshold gate shipped — no CI yet).
 - Test fixtures and helpers: ported where useful.

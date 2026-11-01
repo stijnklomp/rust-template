@@ -1,6 +1,6 @@
 # Executable specs are the source of truth (BDD)
 
-Humans approve behaviour, agents write code. The durable artifact is therefore the spec, not the implementation: `tests/acceptance/specs/*.feature` holds what the service promises, in Gherkin, and the same files run against two drivers — in-process (`axum-test` over the real router, real Postgres/Valkey) and black-box (`reqwest` against a deployed service). A rewrite is safe when the spec still passes.
+Humans approve behaviour, agents write code. The durable artifact is therefore the spec, not the implementation: `tests/acceptance/specs/*.feature` holds what the service promises, in Gherkin, and the same files run against two drivers — in-process (`axum-test` over the real router, real Postgres/Valkey) and black-box (`reqwest` against a deployed service or the compose-hosted app). A rewrite is safe when the spec still passes.
 
 Gherkin on `cucumber` 0.23 (cucumber-rs) is the chosen runner. It is the only mature Rust implementation with async steps, a step registry, tags, retries and `fail_on_skipped`; Gauge has no maintained Rust runner, `rstest-bdd` needs a hand-written Rust binding per scenario (so the spec alone is not sufficient), and `subplot`/`gherkin-cargo-test` either need an external toolchain or are sync-only and too young for a template. The spec text stays language-neutral: only step definitions and `driver.rs` are Rust.
 
@@ -14,6 +14,6 @@ Rules that keep the spec rewrite-proof and honest:
 - In-process runs apply migrations once and use the real stack; black-box runs never touch the schema.
 - `tests/acceptance/specs.lock` pins the approved `.feature` files by SHA-256. `just spec-check` runs in `just check`; changing a spec requires `just spec-approve`, a deliberately separate, reviewable step a human runs after approving the diff. This mirrors the committed `.sqlx` cache: the gate fails when the artifact is stale.
 
-Unit tests stay next to the code (`#[cfg(test)] mod tests`), because Rust unit tests need private access and cargo compiles them into the library target; a `test/unit/` directory cannot do that. The acceptance suite is its own cargo target (`harness = false`, behind the `spec` feature) because nextest cannot list a custom harness; `just test-spec` and `just test-blackbox` are the entry points. The spec is deliberately not part of `just test`: it needs infrastructure, while the fast suite must not.
+Unit tests stay next to the code (`#[cfg(test)] mod tests`), because Rust unit tests need private access and cargo compiles them into the library target; a `test/unit/` directory cannot do that. The acceptance suite is its own cargo target (`harness = false`, behind the `spec` feature) because nextest cannot list a custom harness; `just test-spec`, `just test-blackbox` (deployed) and `just test-blackbox-compose` (local compose) are the entry points. The spec is deliberately not part of `just test`: it needs infrastructure, while the fast suite must not.
 
 `tests/acceptance/specs/notes.feature` and its steps are the worked example, marked for removal like the rest of the demo slice.
